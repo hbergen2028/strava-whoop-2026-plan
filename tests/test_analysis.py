@@ -69,3 +69,25 @@ def test_analyze_bike_detects_davis_island():
     assert b["di_count"] == 2
     assert b["longest_miles"] >= 59
     assert b["avg_speed_20plus"] > 0
+
+
+from analysis import analyze_recovery
+
+
+def test_analyze_recovery_latest_and_trend():
+    records = [
+        {"date": "2026-06-10", "recovery": 80, "rhr": 47, "hrv": 80.7, "sleep_perf": 82},
+        {"date": "2026-06-09", "recovery": 91, "rhr": 46, "hrv": 97.2, "sleep_perf": 78},
+        {"date": "2026-06-08", "recovery": 30, "rhr": 55, "hrv": 50.0, "sleep_perf": 60},
+    ]
+    r = analyze_recovery(records, today=date(2026, 6, 10))
+    assert r["latest"]["recovery"] == 80
+    assert r["latest"]["band"] == "green"
+    assert 30 <= r["trend_7d_avg"] <= 91
+    assert r["has_data"] is True
+
+
+def test_analyze_recovery_empty():
+    r = analyze_recovery([], today=date(2026, 6, 10))
+    assert r["has_data"] is False
+    assert r["latest"] is None

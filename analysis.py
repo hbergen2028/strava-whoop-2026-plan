@@ -116,3 +116,38 @@ def analyze_bike(acts, today=None):
         "di_avg_speed": di_speed,
         "has_data": bool(rides),
     }
+
+
+GREEN_MIN = 67
+RED_MAX = 33
+
+
+def recovery_band(score):
+    if score is None:
+        return "unknown"
+    if score >= GREEN_MIN:
+        return "green"
+    if score <= RED_MAX:
+        return "red"
+    return "yellow"
+
+
+def analyze_recovery(records, today=None):
+    """Latest recovery + 7-day trend from normalized WHOOP records (date strings)."""
+    today = today or date.today()
+    norm = []
+    for r in records:
+        d = r["date"] if isinstance(r["date"], date) else date.fromisoformat(str(r["date"])[:10])
+        norm.append({**r, "date": d, "band": recovery_band(r.get("recovery"))})
+    norm.sort(key=lambda r: r["date"], reverse=True)
+    if not norm:
+        return {"has_data": False, "latest": None, "trend_7d_avg": 0}
+
+    cutoff = today - timedelta(days=7)
+    last7 = [r["recovery"] for r in norm if r["date"] >= cutoff and r.get("recovery") is not None]
+    return {
+        "has_data": True,
+        "latest": norm[0],
+        "trend_7d_avg": sum(last7) / len(last7) if last7 else norm[0]["recovery"],
+        "records": norm,
+    }
