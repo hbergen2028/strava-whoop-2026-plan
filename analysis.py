@@ -70,3 +70,49 @@ def analyze_run(acts, today=None):
         "runs_per_week_90d": len(recent_runs) / 13 if recent_runs else 0,
         "has_data": bool(fives),
     }
+
+
+def analyze_swim(acts, today=None, weeks=8):
+    """Sessions/week and weeks hitting the 2x/week target over a trailing window."""
+    today = today or date.today()
+    swims = [a for a in acts if a["sport"] == "swim"]
+    start = week_start(today) - timedelta(weeks=weeks - 1)
+    per_week = defaultdict(int)
+    for a in swims:
+        ws = week_start(a["date"])
+        if ws >= start:
+            per_week[ws] += 1
+    weeks_hit = sum(1 for n in per_week.values() if n >= 2)
+    recent = [a for a in swims if a["date"] >= start]
+    return {
+        "sessions_per_week": len(recent) / weeks,
+        "weeks_hit_target": weeks_hit,
+        "total_weeks": weeks,
+        "has_data": bool(swims),
+    }
+
+
+def analyze_bike(acts, today=None):
+    """Speed, volume, longest ride, and Tue/Thu pre-07:00 (Davis Island) detection."""
+    today = today or date.today()
+    rides = [a for a in acts if a["sport"] == "bike"]
+    cutoff_90 = today - timedelta(days=90)
+    cutoff_28 = today - timedelta(days=28)
+    recent = [a for a in rides if a["date"] >= cutoff_90]
+
+    meaningful = [a for a in recent if a["miles"] > 20]
+    avg_speed = (sum(a["avg_speed_mph"] for a in meaningful) / len(meaningful)
+                 if meaningful else 0)
+
+    di = [a for a in recent if a["weekday"] in (1, 3) and a["hour"] < 7]
+    di_speed = (sum(a["avg_speed_mph"] for a in di) / len(di)) if di else 0
+
+    last_4wk = [a for a in rides if a["date"] >= cutoff_28]
+    return {
+        "avg_speed_20plus": avg_speed,
+        "longest_miles": max((a["miles"] for a in rides), default=0),
+        "weekly_avg_4wk": sum(a["miles"] for a in last_4wk) / 4,
+        "di_count": len(di),
+        "di_avg_speed": di_speed,
+        "has_data": bool(rides),
+    }
