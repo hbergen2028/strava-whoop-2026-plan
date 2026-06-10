@@ -23,7 +23,7 @@ ACCESS_TOKEN = os.getenv("STRAVA_ACCESS_TOKEN")
 REFRESH_TOKEN = os.getenv("STRAVA_REFRESH_TOKEN")
 TOKEN_EXPIRES_AT = int(os.getenv("STRAVA_TOKEN_EXPIRES_AT", "0"))
 
-CYCLING_TYPES = {"Ride", "VirtualRide", "EBikeRide"}
+ACTIVITY_TYPES = {"Ride", "VirtualRide", "EBikeRide", "Run", "Swim"}
 
 
 def refresh_if_needed():
@@ -80,13 +80,13 @@ def main():
     print("Fetching all Strava activities...")
     all_activities = fetch_all_activities()
 
-    cycling = [a for a in all_activities if a.get("type") in CYCLING_TYPES]
+    kept = [a for a in all_activities if a.get("type") in ACTIVITY_TYPES]
 
     print(f"\nTotal activities fetched : {len(all_activities)}")
-    print(f"Cycling activities found : {len(cycling)}")
+    print(f"Run/Swim/Bike kept       : {len(kept)}")
 
     with open(OUTPUT_FILE, "w") as f:
-        json.dump(cycling, f, indent=2)
+        json.dump(kept, f, indent=2)
 
     print(f"Saved to {OUTPUT_FILE}")
     print("Run plan.py next.")
