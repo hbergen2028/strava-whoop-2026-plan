@@ -5,7 +5,7 @@ Usage: py -3.12 grade.py   (also run automatically Sunday nights — see schedul
 
 import os
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from dotenv import load_dotenv
 
@@ -25,6 +25,18 @@ GRADES_FILE = os.path.join(HERE, "grades.json")
 def _completed_week_start(today):
     """Monday of the most recently completed week (the week before this one)."""
     return week_start(today) - timedelta(days=7)
+
+
+def _due_ms(day):
+    """Epoch ms for `day`, the due date ClickUp Home needs to surface the task."""
+    return int(datetime.combine(day, time(12, 0)).timestamp() * 1000)
+
+
+def _week_label(ws, we):
+    """'Jul 13 to 19', or 'Jun 29 to Jul 05' when the week crosses a month."""
+    if ws.month == we.month:
+        return f"{ws:%b %d} to {we:%d}"
+    return f"{ws:%b %d} to {we:%b %d}"
 
 
 def summarize_week(acts, recovery, ws):
@@ -88,7 +100,7 @@ def main():
 
     summary = summarize_week(acts, recovery, ws)
     grade = grade_week(summary)
-    name = f"Week of {ws:%b %d} — Grade: {grade['letter']}"
+    name = f"Week of {_week_label(ws, ws + timedelta(days=6))} — Grade: {grade['letter']}"
     desc = build_description(ws, summary, grade)
 
     log = json.load(open(GRADES_FILE)) if os.path.exists(GRADES_FILE) else []
@@ -96,10 +108,13 @@ def main():
     log.append({"week_start": ws.isoformat(), "letter": grade["letter"], "gpa": grade["gpa"]})
     json.dump(log, open(GRADES_FILE, "w"), indent=2)
 
+    token = os.getenv("CLICKUP_API_TOKEN", "")
     res = clickup.post_or_update_week_task(
-        token=os.getenv("CLICKUP_API_TOKEN", ""),
+        token=token,
         list_id=os.getenv("CLICKUP_LIST_ID", ""),
-        name=name, description=desc)
+        name=name, description=desc,
+        assignee_id=clickup.current_user_id(token),
+        due_date=_due_ms(today))
 
     print(f"{name}  (GPA {grade['gpa']})")
     if res.get("skipped"):
