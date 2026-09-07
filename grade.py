@@ -45,7 +45,11 @@ def summarize_week(acts, recovery, ws):
     wk_acts = [a for a in acts if ws <= a["date"] <= we]
 
     bikes = [a for a in wk_acts if a["sport"] == "bike"]
-    key_bikes = [a for a in bikes if (a["weekday"] in (1, 3) and a["hour"] < 7) or a["weekday"] == 5]
+    # Tue/Thu are the Davis Island slots: outdoors that means a pre-07:00 start,
+    # but a Zwift ride fills the same slot at any hour. Sat is the long ride.
+    key_bikes = [a for a in bikes
+                 if (a["weekday"] in (1, 3) and (a["hour"] < 7 or a["virtual"]))
+                 or a["weekday"] == 5]
     swims = [a for a in wk_acts if a["sport"] == "swim"]
     runs = [a for a in wk_acts if a["sport"] == "run"]
 

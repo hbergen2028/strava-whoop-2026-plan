@@ -37,6 +37,8 @@ def parse_activities(raw):
             "avg_speed_mph": (a.get("average_speed", 0) or 0) * MS_TO_MPH,
             "pace_sec_per_mi": (moving_s / miles) if miles > 0 else 0,
             "name": a.get("name", ""),
+            # Zwift and friends land here; sport is already collapsed to "bike".
+            "virtual": a.get("type") == "VirtualRide",
         })
     return out
 

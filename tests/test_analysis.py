@@ -91,3 +91,18 @@ def test_analyze_recovery_empty():
     r = analyze_recovery([], today=date(2026, 6, 10))
     assert r["has_data"] is False
     assert r["latest"] is None
+
+
+def test_parse_activities_flags_virtual_rides():
+    """VirtualRide collapses to sport 'bike', so keep the virtual flag separately."""
+    raw = [
+        {"type": "VirtualRide", "start_date_local": "2026-09-01T09:43:00",
+         "distance": 32186, "moving_time": 3600, "name": "Zwift - Racing"},
+        {"type": "Ride", "start_date_local": "2026-08-31T05:00:00",
+         "distance": 52000, "moving_time": 7200, "name": "Morning Ride"},
+    ]
+    acts = parse_activities(raw)
+    zwift = next(a for a in acts if a["date"] == date(2026, 9, 1))
+    outdoor = next(a for a in acts if a["date"] == date(2026, 8, 31))
+    assert zwift["sport"] == "bike" and zwift["virtual"] is True
+    assert outdoor["sport"] == "bike" and outdoor["virtual"] is False
