@@ -17,6 +17,22 @@ BLOCKS = [
 
 PULL_TARGETS = {"Base + Habit": 2, "Build": 4, "Sharpen": 6, "Peak/Attempt": 6}
 
+# Zwift FTP tests every 6 weeks, on the Tuesday slot (a Zwift ride there counts
+# as a key ride at any hour). Results reset training zones for the coming weeks.
+FTP_TEST_START = date(2026, 9, 15)
+FTP_TEST_INTERVAL_DAYS = 42
+FTP_TEST_DESC = "Zwift FTP test — maximal effort, sets zones for the next 6 weeks"
+
+
+def ftp_test_dates():
+    """Scheduled FTP test dates from FTP_TEST_START to the end of the season."""
+    out = []
+    d = FTP_TEST_START
+    while d <= END:
+        out.append(d)
+        d += timedelta(days=FTP_TEST_INTERVAL_DAYS)
+    return out
+
 # Run focus per block (Wednesday quality session).
 RUN_FOCUS = {
     "Base + Habit": "Easy + 6x20s strides (heat — keep it short)",
@@ -35,6 +51,21 @@ def block_for(d):
 
 def pull_target(block):
     return PULL_TARGETS[block]
+
+
+DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _apply_ftp_test(days, ws, test_dates):
+    """Swap the scheduled session for an FTP test on any test date inside this week."""
+    for td in test_dates:
+        if not (ws <= td <= ws + timedelta(days=6)):
+            continue
+        for d in days:
+            if d["dow"] == DOW_NAMES[td.weekday()]:
+                # A test is always a key bike session, wherever it lands.
+                d.update(sport="bike", key=True, desc=FTP_TEST_DESC, ftp_test=True)
+    return days
 
 
 def _weekly_template(block, bike_target, long_ride):
@@ -61,6 +92,7 @@ def generate_weeks():
         cur += timedelta(days=7)
 
     vols = bike_weekly_volumes(len(weeks))
+    test_dates = ftp_test_dates()
     out = []
     for i, ws in enumerate(weeks):
         block = block_for(ws)
@@ -73,6 +105,7 @@ def generate_weeks():
             "block": block,
             "bike_target": bike_target,
             "bike_kind": vols[i]["kind"],
-            "days": _weekly_template(block, bike_target, long_ride),
+            "days": _apply_ftp_test(
+                _weekly_template(block, bike_target, long_ride), ws, test_dates),
         })
     return out

@@ -21,6 +21,13 @@ def gate_session(day, recovery, sleep_perf=None):
     if band == "green":
         return {**day, "adjustment": "as_prescribed", "recommendation": day["desc"]}
 
+    # Band is yellow or red here. An FTP test can't be trimmed or downgraded —
+    # a sub-maximal effort yields a bad number that sets wrong zones for 6 weeks.
+    if day.get("ftp_test"):
+        return {**day, "adjustment": "postpone",
+                "recommendation": "Recovery isn't green — POSTPONE the FTP test to the next "
+                                  "green day (a sub-maximal test sets wrong zones). Easy Zone 2 today."}
+
     if not hard:
         # easy day stays easy regardless of yellow/red
         return {**day, "adjustment": "as_prescribed", "recommendation": day["desc"]}
