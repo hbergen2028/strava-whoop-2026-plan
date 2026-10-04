@@ -4,13 +4,14 @@ Usage: py -3.12 grade.py   (also run automatically Sunday nights — see schedul
 """
 
 import os
+import sys
 import json
 from datetime import date, datetime, time, timedelta
 
 from dotenv import load_dotenv
 
 from common import week_start
-from analysis import parse_activities, recovery_band
+from analysis import parse_activities, recovery_band, swim_sessions
 from periodize import generate_weeks, pull_target
 from grading import grade_week
 import clickup
@@ -27,6 +28,20 @@ def _completed_week_start(today):
     return week_start(today) - timedelta(days=7)
 
 
+def _target_week(today, week_arg=None):
+    """Monday of the week to grade: an explicit --week, else the last completed one.
+
+    An explicit week lets a finished week be graded before the Monday scheduler
+    reaches it (e.g. on the Sunday it ends, once all sessions are in).
+    """
+    if week_arg:
+        ws = date.fromisoformat(week_arg)
+        if ws.weekday() != 0:
+            raise ValueError(f"--week must be a Monday; {ws} is a {ws:%A}")
+        return ws
+    return _completed_week_start(today)
+
+
 def _due_ms(day):
     """Epoch ms for `day`, the due date ClickUp Home needs to surface the task."""
     return int(datetime.combine(day, time(12, 0)).timestamp() * 1000)
@@ -39,14 +54,26 @@ def _week_label(ws, we):
     return f"{ws:%b %d} to {we:%b %d}"
 
 
-def summarize_week(acts, recovery, ws):
-    """Build the grade_week input dict from actuals for the week starting ws."""
+def summarize_week(acts, recovery, ws, workouts=None):
+    """Build the grade_week input dict from actuals for the week starting ws.
+
+    workouts is the WHOOP workout list and is the source of truth for swims —
+    most swims never reach Strava. None means no WHOOP workout data was
+    available, in which case we fall back to Strava rather than scoring zero.
+    """
     we = ws + timedelta(days=6)
     wk_acts = [a for a in acts if ws <= a["date"] <= we]
 
     bikes = [a for a in wk_acts if a["sport"] == "bike"]
-    key_bikes = [a for a in bikes if (a["weekday"] in (1, 3) and a["hour"] < 7) or a["weekday"] == 5]
-    swims = [a for a in wk_acts if a["sport"] == "swim"]
+    # Tue/Thu are the Davis Island slots: outdoors that means a pre-07:00 start,
+    # but a Zwift ride fills the same slot at any hour. Sat is the long ride.
+    key_bikes = [a for a in bikes
+                 if (a["weekday"] in (1, 3) and (a["hour"] < 7 or a["virtual"]))
+                 or a["weekday"] == 5]
+    if workouts is None:
+        swims = [a for a in wk_acts if a["sport"] == "swim"]
+    else:
+        swims = swim_sessions(workouts, ws, we)
     runs = [a for a in wk_acts if a["sport"] == "run"]
 
     week_meta = next((w for w in generate_weeks() if w["week_start"] == ws), None)
@@ -92,13 +119,16 @@ def build_description(ws, summary, grade):
 
 def main():
     today = date.today()
-    ws = _completed_week_start(today)
+    week_arg = None
+    if "--week" in sys.argv:
+        week_arg = sys.argv[sys.argv.index("--week") + 1]
+    ws = _target_week(today, week_arg)
 
     acts = parse_activities(json.load(open(ACTIVITIES_FILE))) if os.path.exists(ACTIVITIES_FILE) else []
     whoop = json.load(open(WHOOP_FILE)) if os.path.exists(WHOOP_FILE) else {"recovery": []}
     recovery = whoop.get("recovery", [])
 
-    summary = summarize_week(acts, recovery, ws)
+    summary = summarize_week(acts, recovery, ws, workouts=whoop.get("workouts"))
     grade = grade_week(summary)
     name = f"Week of {_week_label(ws, ws + timedelta(days=6))} — Grade: {grade['letter']}"
     desc = build_description(ws, summary, grade)

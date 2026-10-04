@@ -37,7 +37,22 @@ def parse_activities(raw):
             "avg_speed_mph": (a.get("average_speed", 0) or 0) * MS_TO_MPH,
             "pace_sec_per_mi": (moving_s / miles) if miles > 0 else 0,
             "name": a.get("name", ""),
+            # Zwift and friends land here; sport is already collapsed to "bike".
+            "virtual": a.get("type") == "VirtualRide",
         })
+    return out
+
+
+def swim_sessions(workouts, start, end):
+    """WHOOP swim workouts in [start, end]. WHOOP is the source of truth for swims:
+    most swims never reach Strava, so counting them from activities undercounts."""
+    out = []
+    for w in workouts or []:
+        if w.get("sport") != "swimming":
+            continue
+        d = w["date"] if isinstance(w["date"], date) else date.fromisoformat(str(w["date"])[:10])
+        if start <= d <= end:
+            out.append({**w, "date": d})
     return out
 
 
@@ -72,23 +87,31 @@ def analyze_run(acts, today=None):
     }
 
 
-def analyze_swim(acts, today=None, weeks=8):
-    """Sessions/week and weeks hitting the 2x/week target over a trailing window."""
+def analyze_swim(acts, today=None, weeks=8, workouts=None):
+    """Sessions/week and weeks hitting the 2x/week target over a trailing window.
+
+    workouts (WHOOP) is the source of truth for swims — see swim_sessions.
+    None means no WHOOP workout data, so fall back to Strava rather than
+    reporting a habit as lapsed when it is only unposted.
+    """
     today = today or date.today()
-    swims = [a for a in acts if a["sport"] == "swim"]
     start = week_start(today) - timedelta(weeks=weeks - 1)
+    if workouts is None:
+        swim_dates = [a["date"] for a in acts if a["sport"] == "swim"]
+    else:
+        swim_dates = [w["date"] for w in swim_sessions(workouts, start, today)]
+
     per_week = defaultdict(int)
-    for a in swims:
-        ws = week_start(a["date"])
-        if ws >= start:
-            per_week[ws] += 1
+    for d in swim_dates:
+        if week_start(d) >= start:
+            per_week[week_start(d)] += 1
     weeks_hit = sum(1 for n in per_week.values() if n >= 2)
-    recent = [a for a in swims if a["date"] >= start]
+    recent = [d for d in swim_dates if d >= start]
     return {
         "sessions_per_week": len(recent) / weeks,
         "weeks_hit_target": weeks_hit,
         "total_weeks": weeks,
-        "has_data": bool(swims),
+        "has_data": bool(swim_dates),
     }
 
 

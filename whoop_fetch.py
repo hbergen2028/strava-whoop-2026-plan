@@ -6,6 +6,7 @@ Auto-refreshes the WHOOP token if expired. Usage: py -3.12 whoop_fetch.py
 import os
 import json
 import time
+from datetime import datetime, timezone
 
 import requests
 from dotenv import load_dotenv, set_key
@@ -22,6 +23,9 @@ EXPIRES_AT = int(os.getenv("WHOOP_TOKEN_EXPIRES_AT", "0"))
 
 BASE = "https://api.prod.whoop.com/developer"
 TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
+
+# Monday of the season's opening week (the plan runs Jun 9 - Dec 31 2026).
+SEASON_START = "2026-06-08T00:00:00.000Z"
 
 
 def refresh_if_needed():
@@ -49,6 +53,27 @@ def _get(path, limit=30):
     r = requests.get(f"{BASE}{path}", headers=headers, params={"limit": limit})
     r.raise_for_status()
     return r.json().get("records", [])
+
+
+def _get_paged(path, start, end, limit=25):
+    """Every record in [start, end], following nextToken pagination.
+
+    The plain limit=N call only reaches back ~3 weeks of workouts, which is far
+    short of the season, so swims need an explicit date range plus paging.
+    """
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
+    out, token = [], None
+    while True:
+        params = {"limit": limit, "start": start, "end": end}
+        if token:
+            params["nextToken"] = token
+        r = requests.get(f"{BASE}{path}", headers=headers, params=params)
+        r.raise_for_status()
+        body = r.json()
+        out += body.get("records", [])
+        token = body.get("next_token")
+        if not token:
+            return out
 
 
 def main():
@@ -81,10 +106,24 @@ def main():
             "sleep_perf": sleep_by_day.get(day),
         })
 
-    out = {"recovery": norm, "cycles": cycles, "fetched_at": int(time.time())}
+    # Workouts are where swims live — most never reach Strava, so this is the
+    # source of truth for the swim count. Full season so past weeks can regrade.
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    raw_workouts = _get_paged("/v2/activity/workout", SEASON_START, now_iso)
+    workouts = [{
+        "date": (w.get("start") or "")[:10],
+        "sport": w.get("sport_name"),
+        "start": w.get("start"),
+        "strain": (w.get("score") or {}).get("strain"),
+    } for w in raw_workouts if w.get("start")]
+
+    out = {"recovery": norm, "cycles": cycles, "workouts": workouts,
+           "fetched_at": int(time.time())}
     with open(OUTPUT_FILE, "w") as f:
         json.dump(out, f, indent=2)
-    print(f"Saved {len(norm)} recovery records to {OUTPUT_FILE}")
+    swims = sum(1 for w in workouts if w["sport"] == "swimming")
+    print(f"Saved {len(norm)} recovery records, {len(workouts)} workouts "
+          f"({swims} swims) to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
