@@ -108,3 +108,24 @@ def test_missing_workout_data_falls_back_to_strava_rather_than_scoring_zero():
     """An absent workouts key must not silently zero the swim score."""
     s = _summary([_swim_raw("2026-09-01"), _swim_raw("2026-09-03")], None)
     assert s["swim"]["sessions"] == 2
+
+
+# --- choosing which week to grade ---
+
+def test_target_week_defaults_to_last_completed_week():
+    assert grade._target_week(date(2026, 10, 4)) == date(2026, 9, 21)
+
+
+def test_target_week_accepts_an_explicit_monday():
+    """Lets a finished week be graded before the scheduler would reach it."""
+    assert grade._target_week(date(2026, 10, 4), "2026-09-28") == date(2026, 9, 28)
+
+
+def test_target_week_rejects_a_non_monday():
+    """Weeks run Mon-Sun; a mid-week start would silently grade a shifted window."""
+    try:
+        grade._target_week(date(2026, 10, 4), "2026-09-30")
+    except ValueError as e:
+        assert "Monday" in str(e)
+    else:
+        raise AssertionError("expected ValueError for a non-Monday week start")

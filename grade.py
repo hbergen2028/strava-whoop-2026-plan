@@ -4,6 +4,7 @@ Usage: py -3.12 grade.py   (also run automatically Sunday nights — see schedul
 """
 
 import os
+import sys
 import json
 from datetime import date, datetime, time, timedelta
 
@@ -25,6 +26,20 @@ GRADES_FILE = os.path.join(HERE, "grades.json")
 def _completed_week_start(today):
     """Monday of the most recently completed week (the week before this one)."""
     return week_start(today) - timedelta(days=7)
+
+
+def _target_week(today, week_arg=None):
+    """Monday of the week to grade: an explicit --week, else the last completed one.
+
+    An explicit week lets a finished week be graded before the Monday scheduler
+    reaches it (e.g. on the Sunday it ends, once all sessions are in).
+    """
+    if week_arg:
+        ws = date.fromisoformat(week_arg)
+        if ws.weekday() != 0:
+            raise ValueError(f"--week must be a Monday; {ws} is a {ws:%A}")
+        return ws
+    return _completed_week_start(today)
 
 
 def _due_ms(day):
@@ -104,7 +119,10 @@ def build_description(ws, summary, grade):
 
 def main():
     today = date.today()
-    ws = _completed_week_start(today)
+    week_arg = None
+    if "--week" in sys.argv:
+        week_arg = sys.argv[sys.argv.index("--week") + 1]
+    ws = _target_week(today, week_arg)
 
     acts = parse_activities(json.load(open(ACTIVITIES_FILE))) if os.path.exists(ACTIVITIES_FILE) else []
     whoop = json.load(open(WHOOP_FILE)) if os.path.exists(WHOOP_FILE) else {"recovery": []}
