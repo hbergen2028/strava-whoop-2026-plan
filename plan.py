@@ -34,12 +34,12 @@ def load_data():
     raw = json.load(open(ACTIVITIES_FILE)) if os.path.exists(ACTIVITIES_FILE) else []
     acts = parse_activities(raw)
     whoop = json.load(open(WHOOP_FILE)) if os.path.exists(WHOOP_FILE) else {"recovery": []}
-    return acts, whoop.get("recovery", [])
+    return acts, whoop.get("recovery", []), whoop.get("workouts")
 
 
-def build_scorecard(acts, recovery_records, today):
+def build_scorecard(acts, recovery_records, today, workouts=None):
     run = analyze_run(acts, today=today)
-    swim = analyze_swim(acts, today=today)
+    swim = analyze_swim(acts, today=today, workouts=workouts)
     bike = analyze_bike(acts, today=today)
     rec = analyze_recovery(recovery_records, today=today)
 
@@ -107,12 +107,12 @@ def save_plan(weeks, sc):
 
 def main():
     today = date.today()
-    acts, recovery = load_data()
+    acts, recovery, workouts = load_data()
     if not acts:
         print("No activities.json — run fetch.py first.")
         return
     weeks = generate_weeks()
-    sc = build_scorecard(acts, recovery, today)
+    sc = build_scorecard(acts, recovery, today, workouts=workouts)
     print_scorecard(sc)
     print_today(weeks, sc, today)
     save_plan(weeks, sc)

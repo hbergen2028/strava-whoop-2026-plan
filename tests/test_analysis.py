@@ -132,3 +132,35 @@ def test_swim_sessions_handles_missing_workout_data():
     from analysis import swim_sessions
     assert swim_sessions(None, date(2026, 9, 21), date(2026, 9, 27)) == []
     assert swim_sessions([], date(2026, 9, 21), date(2026, 9, 27)) == []
+
+
+# --- analyze_swim must also read WHOOP, not Strava ---
+
+def test_analyze_swim_counts_whoop_workouts():
+    """Strava holds few swims; the scorecard must use WHOOP like the grade does."""
+    workouts = [_wk("2026-09-22", "swimming"), _wk("2026-09-24", "swimming"),
+                _wk("2026-09-23", "cycling")]
+    s = analyze_swim([], today=date(2026, 9, 27), weeks=8, workouts=workouts)
+    assert s["weeks_hit_target"] == 1  # week of Sep 21 had 2 swims
+    assert s["has_data"] is True
+
+
+def test_analyze_swim_ignores_strava_when_whoop_given():
+    strava = parse_activities([
+        {"type": "Swim", "start_date_local": "2026-09-22T06:00:00",
+         "distance": 1372, "moving_time": 1260},
+    ])
+    s = analyze_swim(strava, today=date(2026, 9, 27), weeks=8, workouts=[])
+    assert s["weeks_hit_target"] == 0
+    assert s["sessions_per_week"] == 0
+
+
+def test_analyze_swim_falls_back_to_strava_without_whoop_data():
+    strava = parse_activities([
+        {"type": "Swim", "start_date_local": "2026-09-22T06:00:00",
+         "distance": 1372, "moving_time": 1260},
+        {"type": "Swim", "start_date_local": "2026-09-24T06:00:00",
+         "distance": 1372, "moving_time": 1260},
+    ])
+    s = analyze_swim(strava, today=date(2026, 9, 27), weeks=8, workouts=None)
+    assert s["weeks_hit_target"] == 1
