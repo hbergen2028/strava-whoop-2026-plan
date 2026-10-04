@@ -70,3 +70,41 @@ def test_monday_zwift_is_not_a_key_ride():
 
 def test_saturday_ride_counts_at_any_hour_as_before():
     assert _key_rides(_ride("2026-09-05", 10)) == 1
+
+
+# --- swim count comes from WHOOP, not Strava ---
+
+def _swim_raw(day):
+    return {"type": "Swim", "start_date_local": f"{day}T13:00:00",
+            "distance": 1372, "moving_time": 1260, "name": "swim"}
+
+
+def _whoop_swim(day):
+    return {"date": day, "sport": "swimming", "start": day + "T13:00:00.000Z", "strain": 7.7}
+
+
+def _summary(raw_acts, workouts):
+    from analysis import parse_activities
+    return grade.summarize_week(parse_activities(raw_acts), [], WS, workouts=workouts)
+
+
+def test_swims_are_counted_from_whoop_workouts():
+    s = _summary([], [_whoop_swim("2026-09-01"), _whoop_swim("2026-09-04")])
+    assert s["swim"]["sessions"] == 2
+
+
+def test_strava_swim_without_whoop_record_does_not_count():
+    """WHOOP is the source of truth, so a Strava-only swim is not a second session."""
+    s = _summary([_swim_raw("2026-09-01")], [_whoop_swim("2026-09-01")])
+    assert s["swim"]["sessions"] == 1
+
+
+def test_whoop_swims_outside_the_graded_week_are_ignored():
+    s = _summary([], [_whoop_swim("2026-08-30"), _whoop_swim("2026-09-02")])
+    assert s["swim"]["sessions"] == 1
+
+
+def test_missing_workout_data_falls_back_to_strava_rather_than_scoring_zero():
+    """An absent workouts key must not silently zero the swim score."""
+    s = _summary([_swim_raw("2026-09-01"), _swim_raw("2026-09-03")], None)
+    assert s["swim"]["sessions"] == 2

@@ -10,7 +10,7 @@ from datetime import date, datetime, time, timedelta
 from dotenv import load_dotenv
 
 from common import week_start
-from analysis import parse_activities, recovery_band
+from analysis import parse_activities, recovery_band, swim_sessions
 from periodize import generate_weeks, pull_target
 from grading import grade_week
 import clickup
@@ -39,8 +39,13 @@ def _week_label(ws, we):
     return f"{ws:%b %d} to {we:%b %d}"
 
 
-def summarize_week(acts, recovery, ws):
-    """Build the grade_week input dict from actuals for the week starting ws."""
+def summarize_week(acts, recovery, ws, workouts=None):
+    """Build the grade_week input dict from actuals for the week starting ws.
+
+    workouts is the WHOOP workout list and is the source of truth for swims —
+    most swims never reach Strava. None means no WHOOP workout data was
+    available, in which case we fall back to Strava rather than scoring zero.
+    """
     we = ws + timedelta(days=6)
     wk_acts = [a for a in acts if ws <= a["date"] <= we]
 
@@ -50,7 +55,10 @@ def summarize_week(acts, recovery, ws):
     key_bikes = [a for a in bikes
                  if (a["weekday"] in (1, 3) and (a["hour"] < 7 or a["virtual"]))
                  or a["weekday"] == 5]
-    swims = [a for a in wk_acts if a["sport"] == "swim"]
+    if workouts is None:
+        swims = [a for a in wk_acts if a["sport"] == "swim"]
+    else:
+        swims = swim_sessions(workouts, ws, we)
     runs = [a for a in wk_acts if a["sport"] == "run"]
 
     week_meta = next((w for w in generate_weeks() if w["week_start"] == ws), None)
@@ -102,7 +110,7 @@ def main():
     whoop = json.load(open(WHOOP_FILE)) if os.path.exists(WHOOP_FILE) else {"recovery": []}
     recovery = whoop.get("recovery", [])
 
-    summary = summarize_week(acts, recovery, ws)
+    summary = summarize_week(acts, recovery, ws, workouts=whoop.get("workouts"))
     grade = grade_week(summary)
     name = f"Week of {_week_label(ws, ws + timedelta(days=6))} — Grade: {grade['letter']}"
     desc = build_description(ws, summary, grade)

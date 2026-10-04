@@ -43,6 +43,19 @@ def parse_activities(raw):
     return out
 
 
+def swim_sessions(workouts, start, end):
+    """WHOOP swim workouts in [start, end]. WHOOP is the source of truth for swims:
+    most swims never reach Strava, so counting them from activities undercounts."""
+    out = []
+    for w in workouts or []:
+        if w.get("sport") != "swimming":
+            continue
+        d = w["date"] if isinstance(w["date"], date) else date.fromisoformat(str(w["date"])[:10])
+        if start <= d <= end:
+            out.append({**w, "date": d})
+    return out
+
+
 def analyze_run(acts, today=None):
     """Best ~5k-equivalent pace and derived workout paces from current fitness."""
     today = today or date.today()

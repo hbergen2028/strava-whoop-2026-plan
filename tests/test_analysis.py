@@ -106,3 +106,29 @@ def test_parse_activities_flags_virtual_rides():
     outdoor = next(a for a in acts if a["date"] == date(2026, 8, 31))
     assert zwift["sport"] == "bike" and zwift["virtual"] is True
     assert outdoor["sport"] == "bike" and outdoor["virtual"] is False
+
+
+# --- WHOOP swim sessions (Strava misses most swims; WHOOP is the source of truth) ---
+
+def _wk(day, sport):
+    return {"date": day, "sport": sport, "start": day + "T13:00:00.000Z", "strain": 7.7}
+
+
+def test_swim_sessions_selects_swims_in_range():
+    from analysis import swim_sessions
+    workouts = [_wk("2026-09-22", "swimming"), _wk("2026-09-24", "cycling"),
+                _wk("2026-09-26", "swimming")]
+    got = swim_sessions(workouts, date(2026, 9, 21), date(2026, 9, 27))
+    assert [w["date"] for w in got] == [date(2026, 9, 22), date(2026, 9, 26)]
+
+
+def test_swim_sessions_excludes_swims_outside_the_window():
+    from analysis import swim_sessions
+    workouts = [_wk("2026-09-20", "swimming"), _wk("2026-09-28", "swimming")]
+    assert swim_sessions(workouts, date(2026, 9, 21), date(2026, 9, 27)) == []
+
+
+def test_swim_sessions_handles_missing_workout_data():
+    from analysis import swim_sessions
+    assert swim_sessions(None, date(2026, 9, 21), date(2026, 9, 27)) == []
+    assert swim_sessions([], date(2026, 9, 21), date(2026, 9, 27)) == []
